@@ -1,0 +1,13 @@
+Flask==3.0.2
+Werkzeug==3.0.1
+SQLAlchemy==2.0.32
+Flask-Login==0.6.3
+python-dotenv==1.0.1
+gunicorn==21.2.0
+requests==2.31.0
+Flask-SocketIO==5.3.6
+python-engineio==4.9.0
+python-socketio==5.11.4
+ptyprocess==0.7.0
+gevent==24.11.1
+Flask-Mail==0.9.1          # <-- ADDED for email notifications
