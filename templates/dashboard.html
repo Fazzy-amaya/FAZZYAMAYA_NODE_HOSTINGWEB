@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<section class="stack-lg">
+  <div class="page-head">
+    <div>
+      <h1 class="h2">Dashboard</h1>
+      <p class="muted">Manage your hosted bots</p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{{ url_for('upload') }}">+ Upload</a>
+    </div>
+  </div>
+
+  <!-- Coin balance and payment link -->
+  <div class="card">
+    <div class="row" style="justify-content: space-between; align-items: center;">
+      <span>Your Coin Balance: <strong>{{ user.coins }}</strong></span>
+      <a href="{{ url_for('payment') }}" class="btn btn-outline">Add Coins</a>
+    </div>
+  </div>
+
+  {% if file_limit_reached and user.role != 'owner' %}
+    <div class="card card-warn">
+      <strong>Limit reached:</strong> You have 4 bots already. Uploads will go to
+      <strong>Pending</strong> for owner approval.
+      {% if contact_link %} — <a href="{{ contact_link }}" target="_blank">Contact Owner</a>{% endif %}
+    </div>
+  {% endif %}
+
+  {% if pending and pending|length %}
+  <div class="card">
+    <div class="card-head">
+      <h3>Pending Approval</h3>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>UID</th><th>File</th><th>Status</th><th>Uploaded</th></tr></thead>
+        <tbody>
+          {% for b in pending %}
+          <tr>
+            <td>{{ b.uid }}</td>
+            <td>{{ b.filename }}</td>
+            <td><span class="badge badge-warning">Pending</span></td>
+            <td>{{ b.created_at.strftime('%Y-%m-%d %H:%M') if b.created_at else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="grid cards">
+    {% for b in bots %}
+      <div class="card card-hover">
+        <div class="card-head">
+          <div>
+            <div class="chip">{{ b.uid }}</div>
+            {% if b.status == 'running' %}
+              <span class="badge badge-success">Running</span>
+              {% if b.remaining_seconds %}
+                <span class="badge">{{ b.remaining_seconds // 60 }}m {{ b.remaining_seconds % 60 }}s left</span>
+              {% endif %}
+            {% elif b.status == 'pending' %}
+              <span class="badge badge-warning">Pending</span>
+            {% elif b.status == 'rejected' %}
+              <span class="badge badge-danger">Rejected</span>
+            {% else %}
+              <span class="badge">Stopped</span>
+            {% endif %}
+          </div>
+          <a class="btn btn-ghost" href="{{ url_for('logs', bot_id=b.id) }}">Logs</a>
+        </div>
+
+        <div class="bot-info">
+          <div class="muted">File</div>
+          <div class="mono">{{ b.filename }}</div>
+        </div>
+
+        <div class="row gap" style="flex-wrap: wrap;">
+          {% if b.status == 'pending' %}
+            <button class="btn btn-disabled w-100" disabled>Awaiting Approval</button>
+          {% else %}
+            {% if b.status == 'running' %}
+              <button class="btn btn-outline" data-action="stop" data-id="{{ b.id }}">Stop</button>
+            {% else %}
+              <button class="btn" data-action="start" data-id="{{ b.id }}">Start</button>
+            {% endif %}
+            <button class="btn btn-danger" data-action="delete" data-id="{{ b.id }}">Delete</button>
+            <form method="post" action="{{ url_for('clear_logs', bot_id=b.id) }}" style="display: inline;">
+              <button class="btn btn-ghost" type="submit" onclick="return confirm('Clear all logs for this bot?')">Clear Logs</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <p class="muted">No bots yet. <a href="{{ url_for('upload') }}">Upload one</a> to get started.</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

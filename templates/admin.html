@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Admin • FAZZYAMAYA{% endblock %}
+{% block content %}
+<section class="stack-xl">
+  <div class="page-head">
+    <div>
+      <h1 class="h2">Admin Panel</h1>
+      <p class="muted">Manage users, coins, payments and bots</p>
+    </div>
+  </div>
+
+  <!-- Contact Link & QR Upload Row -->
+  <div class="grid two">
+    <!-- Contact Link Setting -->
+    <div class="card">
+      <div class="card-head"><h3>📞 Contact Link</h3></div>
+      <form method="post" action="{{ url_for('admin_set_contact_link') }}" class="row gap">
+        <input name="contact_link" placeholder="https://t.me/yourlink" value="{{ contact_link or '' }}" />
+        <button class="btn">Save</button>
+      </form>
+    </div>
+
+    <!-- Upload SmartCash QR -->
+    <div class="card">
+      <div class="card-head"><h3>📱 Upload SmartCash QR</h3></div>
+      <form method="post" action="{{ url_for('upload_qr') }}" enctype="multipart/form-data" class="row gap">
+        <input type="file" name="qr_file" accept="image/*" required>
+        <button class="btn">Upload</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create User -->
+  <div class="card">
+    <div class="card-head"><h3>➕ Create New User</h3></div>
+    <form method="post" action="{{ url_for('admin_create_user') }}" class="grid two gap">
+      <input name="username" placeholder="Username" required />
+      <input name="password" type="password" placeholder="Password" required />
+      <label class="row center gap-s">
+        <input type="checkbox" name="approved" /> <span>Approved</span>
+      </label>
+      <input name="expiry" placeholder="Expiry YYYY-MM-DD (optional)" />
+      <input name="coins" placeholder="Initial coins" value="0" />
+      <button class="btn w-100">Create User</button>
+    </form>
+  </div>
+
+  <!-- Users List (with approval & coin management) -->
+  <div class="card">
+    <div class="card-head"><h3>👥 Registered Users</h3></div>
+    <div class="table-wrap">
+      <table class="table" style="font-weight: 500;">
+        <thead>
+          <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Approved</th><th>Expiry</th><th>Coins</th><th>Created</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>{{ u.id }}</td>
+            <td><strong>{{ u.username }}</strong></td>
+            <td>{{ u.email }}</td>
+            <td>{{ u.role }}</td>
+            <td>
+              {% if u.approved %}
+                <span class="badge badge-success">Yes</span>
+              {% else %}
+                <span class="badge badge-danger">No</span>
+              {% endif %}
+            </td>
+            <td>{{ u.expiry if u.expiry else '-' }}</td>
+            <td><strong>{{ u.coins }}</strong></td>
+            <td>{{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '' }}</td>
+            <td>
+              {% if u.username != 'FAZZYAMAYA' %}
+              <form method="post" action="{{ url_for('admin_set_user_status', user_id=u.id) }}" class="row gap" style="flex-wrap: wrap;">
+                <select name="action">
+                  <option value="approve">Approve</option>
+                  <option value="deny">Deny</option>
+                  <option value="delete">Delete</option>
+                </select>
+                <input name="expiry" placeholder="YYYY-MM-DD" size="10" />
+                <input name="coins" placeholder="Coins" size="5" />
+                <button class="btn btn-outline">Apply</button>
+              </form>
+              {% else %}
+                <span class="muted">Owner</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pending Bots -->
+  <div class="card">
+    <div class="card-head"><h3>🤖 Pending Bot Approvals</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>ID</th><th>User</th><th>File</th><th>Uploaded</th><th>Action</th></tr></thead>
+        <tbody>
+        {% if pending_bots and pending_bots|length %}
+          {% for b in pending_bots %}
+          <tr>
+            <td>{{ b.id }}</td>
+            <td>{{ b.owner.username }}</td>
+            <td class="mono">{{ b.filename }}</td>
+            <td>{{ b.created_at.strftime('%Y-%m-%d %H:%M') if b.created_at else '' }}</td>
+            <td class="row gap">
+              <form method="post" action="{{ url_for('approve_bot', bot_id=b.id) }}">
+                <button class="btn btn-success">Approve</button>
+              </form>
+              <form method="post" action="{{ url_for('reject_bot', bot_id=b.id) }}">
+                <button class="btn btn-danger">Reject</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="5" class="muted center">No pending bots.</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Payment Inbox (with receipts) -->
+  <div class="card">
+    <div class="card-head"><h3>💰 Payment Inbox</h3></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>ID</th><th>User</th><th>Package</th><th>Coins</th><th>Amount</th><th>Receipt</th><th>Date</th><th>Action</th></tr></thead>
+        <tbody>
+        {% if pending_payments and pending_payments|length %}
+          {% for p in pending_payments %}
+          <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ p.user.username }}</td>
+            <td>{{ p.package }}</td>
+            <td><strong>{{ p.coins }}</strong></td>
+            <td><strong>₦{{ p.amount }}</strong></td>
+            <td>
+              {% if p.receipt_path %}
+                <a href="{{ url_for('view_receipt', payment_id=p.id) }}" target="_blank" class="btn btn-ghost btn-small">View</a>
+              {% else %}
+                No receipt
+              {% endif %}
+            </td>
+            <td>{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td class="row gap">
+              <form method="post" action="{{ url_for('approve_payment', payment_id=p.id) }}">
+                <button class="btn btn-success">Approve</button>
+              </form>
+              <form method="post" action="{{ url_for('reject_payment', payment_id=p.id) }}">
+                <button class="btn btn-danger">Reject</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="8" class="muted center">No pending payments.</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Logs • DANGERxHOST{% endblock %}
+{% block content %}
+<section class="stack-lg">
+  <div class="page-head">
+    <h1 class="h2">Logs — {{ bot.filename }}</h1>
+    <div class="row gap">
+      <a class="btn btn-outline" href="{{ url_for('dashboard') }}">Back</a>
+      <a class="btn" href="{{ url_for('download_logs', bot_id=bot.id) }}">Download</a>
+    </div>
+  </div>
+  <div class="card">
+    <pre class="logbox">{{ logs }}</pre>
+  </div>
+</section>
+{% endblock %}

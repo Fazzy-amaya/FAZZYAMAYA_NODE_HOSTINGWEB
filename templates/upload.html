@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Upload {% endblock %}
+{% block content %}
+<section class="stack-lg max-640">
+  <h1 class="h2">Upload a bot file</h1>
+  <div class="card">
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('upload_post') }}" class="stack">
+      <label class="file-field">
+        <input type="file" name="file" required />
+        <span>Select file</span>
+      </label>
+      <button class="btn">Upload</button>
+      <p class="muted">Files are executed with <code>python3</code> on start.</p>
+      <div class="card card-glass">
+        <h3 class="h4">Network Requirements</h3>
+        <p>Your bot must be able to handle network issues. For Telegram bots:</p>
+        <ul>
+          <li>Implement retry logic for API calls</li>
+          <li>Handle connection timeouts gracefully</li>
+          <li>Use exponential backoff for retries</li>
+        </ul>
+        <p class="muted">Check the documentation for sample code.</p>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

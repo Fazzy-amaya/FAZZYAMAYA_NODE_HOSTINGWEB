@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Terminal{% endblock %}
+{% block content %}
+<style>
+  .terminal-container {
+    background: rgba(20, 30, 50, 0.3);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    padding: 20px;
+    height: 70vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .output-area {
+    flex: 1;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: #eef6ff;
+    margin-bottom: 16px;
+  }
+  .output-area pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-family: inherit;
+  }
+  .input-area {
+    display: flex;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 30px;
+    padding: 8px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .input-area span {
+    color: #8ab2ff;
+    font-weight: bold;
+  }
+  .input-area input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #eef6ff;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    outline: none;
+  }
+  .input-area input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+  }
+  /* Custom scrollbar */
+  .output-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .output-area::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+  }
+  .output-area::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+  }
+  .output-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+</style>
+
+<div class="stack-lg">
+  <div class="page-head">
+    <h1 class="h2">Package Installer Terminal</h1>
+    <p class="muted">Only <code>pip install &lt;package&gt;</code> commands are allowed.</p>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline">Back</a>
+  </div>
+
+  <div class="terminal-container">
+    <!-- Output area (read‑only) -->
+    <div class="output-area" id="output">
+      <pre id="output-content"></pre>
+    </div>
+    <!-- Input area -->
+    <div class="input-area">
+      <span>$</span>
+      <input type="text" id="command-input" placeholder="Type your pip install command here..." autofocus>
+    </div>
+  </div>
+</div>
+
+<!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const outputPre = document.getElementById('output-content');
+    const inputField = document.getElementById('command-input');
+    const socket = io();
+
+    // Helper to append text to output
+    function appendOutput(text) {
+      outputPre.textContent += text;
+      // Auto-scroll to bottom
+      const outputDiv = document.getElementById('output');
+      outputDiv.scrollTop = outputDiv.scrollHeight;
+    }
+
+    socket.on('connect', () => {
+      appendOutput('🔧 Package installer terminal ready.\r\n');
+      appendOutput('Allowed commands: pip install <package>\r\n');
+      appendOutput('Type your command and press Enter.\r\n\r\n');
+    });
+
+    socket.on('pty_output', (data) => {
+      appendOutput(data);
+    });
+
+    socket.on('disconnect', () => {
+      appendOutput('\r\n❌ Connection closed.\r\n');
+    });
+
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const command = inputField.value.trim();
+        if (command) {
+          appendOutput(`$ ${command}\r\n`);  // echo the command
+          socket.emit('command', command);
+          inputField.value = '';
+        }
+        e.preventDefault();
+      }
+    });
+
+    // Focus input on load
+    inputField.focus();
+  });
+</script>
+{% endblock %}

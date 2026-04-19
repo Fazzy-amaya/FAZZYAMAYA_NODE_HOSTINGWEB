@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Buy Coins{% endblock %}
+{% block content %}
+<div class="stack-lg max-800">
+  <h1 class="h2">Purchase Coins</h1>
+
+  <!-- Package Selection -->
+  <div class="card">
+    <div class="card-head">
+      <h3>📦 Choose a Package</h3>
+    </div>
+    <div class="grid cards" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+      {% for pkg in packages %}
+      <div class="card card-hover" style="cursor: pointer;" onclick="selectPackage('{{ pkg.name }}', {{ pkg.coins }}, {{ pkg.price }})">
+        <h4>{{ pkg.name }}</h4>
+        <p style="font-size: 1.2em; font-weight: bold;">{{ pkg.coins }} coins</p>
+        <p>Price: ₦{{ pkg.price }}</p>
+        <button class="btn btn-outline" style="margin-top: 10px;">Select</button>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Payment Details (shown after package selection) -->
+  <div class="card" id="paymentDetails" style="display: none;">
+    <div class="card-head">
+      <h3>💳 Payment Instructions</h3>
+    </div>
+    <div id="selectedPackageInfo" style="margin-bottom: 20px;"></div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <!-- Bank Transfer -->
+      <div class="card">
+        <h4>Bank Transfer</h4>
+        <p><strong>Account:</strong> 0016939968</p>
+        <p><strong>Name:</strong> NWACHUKWU APPOLONIA CHIKWADO</p>
+        <p><strong>Bank:</strong> ACCESS BANK</p>
+      </div>
+
+      <!-- SmartCash -->
+      <div class="card">
+        <h4>SmartCash</h4>
+        <p><strong>Number:</strong> 9075387568</p>
+        <p><strong>Name:</strong> NWACHUKWU APPOLONIA CHIKWADO</p>
+        {% if qr_path %}
+          <img src="{{ qr_path }}" alt="SmartCash QR" style="max-width: 150px; margin-top: 10px;">
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Receipt Upload Form -->
+    <form method="post" action="{{ url_for('payment_submit') }}" enctype="multipart/form-data" class="form-grid" style="margin-top: 20px;">
+      <input type="hidden" name="package_name" id="package_name">
+      <input type="hidden" name="coins" id="coins">
+      <input type="hidden" name="amount" id="amount">
+      <label>
+        <span>Upload Payment Receipt (screenshot or PDF)</span>
+        <input type="file" name="receipt" accept="image/*,.pdf" required>
+      </label>
+      <button class="btn" id="notifyBtn" disabled>I have made the transfer</button>
+    </form>
+  </div>
+
+  <script>
+    function selectPackage(name, coins, amount) {
+      document.getElementById('package_name').value = name;
+      document.getElementById('coins').value = coins;
+      document.getElementById('amount').value = amount;
+      document.getElementById('selectedPackageInfo').innerHTML = `<p><strong>Selected:</strong> ${name} – ${coins} coins for ₦${amount}</p>`;
+      document.getElementById('paymentDetails').style.display = 'block';
+      document.getElementById('notifyBtn').disabled = false;
+    }
+  </script>
+</div>
+{% endblock %}

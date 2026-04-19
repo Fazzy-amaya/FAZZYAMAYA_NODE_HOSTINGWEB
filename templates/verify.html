@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Verify Email{% endblock %}
+{% block content %}
+<style>
+  .red-card {
+    background: linear-gradient(135deg, #8b0000, #b22222) !important;
+    color: white;
+    border: 1px solid #ff6666;
+  }
+  .red-card input {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 1px solid #ff9999;
+  }
+  .red-card input::placeholder {
+    color: rgba(255,255,255,0.7);
+  }
+  .red-card .btn {
+    background: white;
+    color: #8b0000;
+    font-weight: bold;
+  }
+</style>
+<section class="auth-wrap">
+  <div class="card card-glass max-420 red-card">
+    <h1 class="h2">🔐 Verify Your Email</h1>
+    <p class="muted" style="color: rgba(255,255,255,0.9);">Enter the 6‑digit code sent to your email.</p>
+    <form method="post" action="{{ url_for('verify_post') }}" class="form-grid">
+      <label>
+        <span style="color: white;">Verification Code</span>
+        <input name="code" required pattern="\d{6}" maxlength="6" autocomplete="off" />
+      </label>
+      <button class="btn w-100" type="submit">Verify</button>
+    </form>
+    <p class="muted center" style="color: rgba(255,255,255,0.8);">Didn't receive the code? <a href="{{ url_for('register') }}" style="color: #ffdddd;">Register again</a>.</p>
+  </div>
+</section>
+{% endblock %}
