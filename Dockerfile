@@ -15,5 +15,4 @@ COPY . .
 
 EXPOSE 5000
 
-# Use gevent worker (eventlet is optional, gevent is already installed)
 CMD gunicorn --worker-class gevent -w 1 app:app --bind 0.0.0.0:5000
