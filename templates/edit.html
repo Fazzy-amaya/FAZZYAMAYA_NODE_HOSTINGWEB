@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Edit Bot File{% endblock %}
+{% block content %}
+<section class="stack-lg max-800">
+  <div class="page-head">
+    <h1 class="h2">Edit File</h1>
+    <p class="muted">Bot: {{ bot.filename }}</p>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline">Back</a>
+  </div>
+  <div class="card">
+    <form method="post">
+      <label>
+        <span>File Content ({{ bot.filename }})</span>
+        <textarea name="content" rows="25" style="font-family: monospace; width: 100%;">{{ content }}</textarea>
+      </label>
+      <div class="row gap" style="margin-top: 15px;">
+        <button class="btn" type="submit">Save Changes</button>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+    {% if bot.status == 'running' %}
+      <div class="flash warning" style="margin-top: 15px;">
+        ⚠️ Bot is currently running. Changes will take effect after you stop and restart the bot.
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
