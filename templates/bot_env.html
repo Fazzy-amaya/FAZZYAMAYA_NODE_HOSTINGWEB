@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Bot Environment Variables{% endblock %}
+{% block content %}
+<section class="stack-lg max-640">
+  <div class="page-head">
+    <h1 class="h2">Configure Environment Variables</h1>
+    <p class="muted">Bot: {{ bot.filename }}</p>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline">Back</a>
+  </div>
+  <div class="card">
+    <form method="post">
+      <label>
+        <span>Environment Variables (KEY=VALUE, one per line)</span>
+        <textarea name="env_vars" rows="10" style="font-family: monospace;">{% for key, val in env_vars.items() %}{{ key }}={{ val }}
+{% endfor %}</textarea>
+      </label>
+      <p class="muted">These variables will be passed to your bot when it starts.</p>
+      <button class="btn">Save</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
