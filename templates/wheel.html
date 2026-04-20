@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Fortune Wheel{% endblock %}
+{% block content %}
+<style>
+  .wheel-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0 30px;
+    position: relative;
+  }
+  canvas {
+    background: #2c1a0e;
+    border-radius: 50%;
+    box-shadow: 0 0 0 12px #ffd966, 0 0 0 20px #b8860b, 0 20px 40px rgba(0,0,0,0.5);
+    transition: box-shadow 0.2s ease;
+  }
+  .spin-btn {
+    margin-top: 40px;
+    padding: 14px 40px;
+    font-size: 28px;
+    font-weight: bold;
+    background: radial-gradient(circle at 30% 10%, #ffd700, #b8860b);
+    border: none;
+    border-radius: 60px;
+    color: #2c1a0e;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+    font-family: 'Poppins', sans-serif;
+  }
+  .spin-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+  }
+  .spin-btn:active {
+    transform: scale(0.98);
+  }
+  .spin-btn.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+    transform: none;
+  }
+  .info-panel {
+    margin-bottom: 25px;
+    font-size: 18px;
+    background: linear-gradient(135deg, rgba(0,0,0,0.7), rgba(0,0,0,0.5));
+    padding: 12px 24px;
+    border-radius: 40px;
+    backdrop-filter: blur(8px);
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+    border: 1px solid #ffd966;
+    color: #ffd966;
+    font-weight: bold;
+  }
+  .info-panel span {
+    color: #fff;
+  }
+  .result-message {
+    margin-top: 25px;
+    font-size: 22px;
+    font-weight: bold;
+    background: rgba(0,0,0,0.7);
+    padding: 12px 24px;
+    border-radius: 40px;
+    color: #ffd966;
+    text-align: center;
+    max-width: 80%;
+    border-left: 4px solid #ffd966;
+    border-right: 4px solid #ffd966;
+  }
+</style>
+
+<div class="wheel-container">
+  <div class="info-panel">
+    🎡 Spins left today: <strong id="spins-left">{{ user.spin_remaining }}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+    💰 Coins: <strong id="coins-balance">{{ user.coins }}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+    🎁 Free deploy: <strong id="free-deploy">{{ 'Yes' if user.free_deploy_available else 'No' }}</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+    ✨ 2x Multiplier: <strong id="multiplier">{{ 'Active' if user.multiplier_active else 'Inactive' }}</strong>
+  </div>
+  <canvas id="wheelCanvas" width="600" height="600"></canvas>
+  <button id="spinBtn" class="spin-btn">SPIN</button>
+  <div id="resultMessage" class="result-message"></div>
+</div>
+
+<script>
+  const SEGMENTS = [
+    "10 Coins", "50 Coins", "100 Coins", "500 Coins", "1000 Coins",
+    "Free 24h", "2x Coins", "Free Spin", "No Win"
+  ];
+  const COLORS = [
+    "#f9e076", "#f5d742", "#f1cc2c", "#edc51e", "#e9be14",
+    "#e5b812", "#e1b210", "#ddac0e", "#d9a60c"
+  ];
+  const SEGMENT_ANGLE = 360 / SEGMENTS.length;
+
+  let canvas = document.getElementById('wheelCanvas');
+  let ctx = canvas.getContext('2d');
+  let spinning = false;
+  let currentRotation = 0;
+  let animationId = null;
+  let spinStartTime = null;
+  let spinDuration = 2500;
+  let finalRotation = 0;
+
+  function drawWheel() {
+    const size = canvas.width;
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = size / 2;
+
+    ctx.clearRect(0, 0, size, size);
+    for (let i = 0; i < SEGMENTS.length; i++) {
+      const start = currentRotation + i * SEGMENT_ANGLE;
+      const end = start + SEGMENT_ANGLE;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, radius, start * Math.PI / 180, end * Math.PI / 180);
+      ctx.closePath();
+      ctx.fillStyle = COLORS[i % COLORS.length];
+      ctx.fill();
+      ctx.strokeStyle = "#b87c10";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((start + SEGMENT_ANGLE / 2) * Math.PI / 180);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#2c1a0e";
+      ctx.font = "bold 18px 'Poppins'";
+      ctx.shadowBlur = 0;
+      ctx.fillText(SEGMENTS[i], radius * 0.65, 0);
+      ctx.restore();
+    }
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 28, 0, 2 * Math.PI);
+    ctx.fillStyle = "#ffd966";
+    ctx.fill();
+    ctx.fillStyle = "#b8860b";
+    ctx.font = "bold 28px 'Poppins'";
+    ctx.fillText("★", centerX-14, centerY+10);
+    ctx.beginPath();
+    ctx.moveTo(centerX + radius - 20, centerY - 12);
+    ctx.lineTo(centerX + radius + 8, centerY);
+    ctx.lineTo(centerX + radius - 20, centerY + 12);
+    ctx.fillStyle = "#f39c12";
+    ctx.fill();
+  }
+
+  function animateSpin(now) {
+    if (!spinning) return;
+    const elapsed = now - spinStartTime;
+    let t = Math.min(1, elapsed / spinDuration);
+    const ease = 1 - Math.pow(1 - t, 3);
+    const angle = finalRotation * ease;
+    currentRotation = angle;
+    drawWheel();
+    if (t < 1) {
+      requestAnimationFrame(animateSpin);
+    } else {
+      spinning = false;
+      animationId = null;
+      document.getElementById('spinBtn').disabled = false;
+      document.getElementById('spinBtn').classList.remove('disabled');
+    }
+  }
+
+  function spinToSegment(segmentIndex) {
+    if (spinning) return;
+    spinning = true;
+    const pointerAngle = -90;
+    const segmentCenter = (segmentIndex * SEGMENT_ANGLE + SEGMENT_ANGLE/2);
+    const targetRotation = (pointerAngle - segmentCenter) % 360;
+    const fullSpins = 8;
+    finalRotation = currentRotation + fullSpins * 360 + targetRotation;
+    spinStartTime = performance.now();
+    animationId = requestAnimationFrame(animateSpin);
+  }
+
+  document.getElementById('spinBtn').addEventListener('click', () => {
+    if (spinning) return;
+    const btn = document.getElementById('spinBtn');
+    btn.disabled = true;
+    btn.classList.add('disabled');
+
+    fetch('/spin', { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          alert(data.error);
+          btn.disabled = false;
+          btn.classList.remove('disabled');
+          return;
+        }
+        document.getElementById('spins-left').innerText = data.remaining_spins;
+        document.getElementById('coins-balance').innerText = data.new_balance;
+        document.getElementById('free-deploy').innerText = data.free_deploy_available ? 'Yes' : 'No';
+        document.getElementById('multiplier').innerText = data.multiplier_active ? 'Active' : 'Inactive';
+        document.getElementById('resultMessage').innerHTML = data.message;
+        const segIndex = SEGMENTS.indexOf(data.segment);
+        if (segIndex !== -1) {
+          spinToSegment(segIndex);
+        } else {
+          btn.disabled = false;
+          btn.classList.remove('disabled');
+          spinning = false;
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Spin failed. Try again.');
+        btn.disabled = false;
+        btn.classList.remove('disabled');
+      });
+  });
+
+  drawWheel();
+</script>
+{% endblock %}
