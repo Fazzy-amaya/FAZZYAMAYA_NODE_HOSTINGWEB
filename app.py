@@ -57,7 +57,6 @@ def migrate_database():
                 conn.execute(text("ALTER TABLE users ADD COLUMN trial_used BOOLEAN DEFAULT 0"))
             if 'email' not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(120)"))
-            # wheel columns
             if 'last_spin_date' not in columns:
                 conn.execute(text("ALTER TABLE users ADD COLUMN last_spin_date DATE"))
             if 'spin_remaining' not in columns:
@@ -92,7 +91,6 @@ def migrate_database():
                     conn2.execute(text("ALTER TABLE payments ADD COLUMN receipt_path VARCHAR(255)"))
                     conn2.commit()
 
-        # env_vars column to bots table
         if 'bots' in inspector.get_table_names():
             columns = [col['name'] for col in inspector.get_columns('bots')]
             if 'env_vars' not in columns:
@@ -105,14 +103,10 @@ migrate_database()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev_secret_change_me")
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # ------------------ Configuration ------------------
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf'}
 ALLOWED_ARCHIVE_EXTENSIONS = {'zip'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def allowed_archive(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_ARCHIVE_EXTENSIONS
@@ -252,7 +246,7 @@ def user_file_limit_reached(db, user: User) -> bool:
         return False
     return user_active_bot_count(db, user) >= 4
 
-# ------------------ Health & Test ------------------
+# ------------------ Health ------------------
 @app.route('/health')
 def health():
     return 'OK', 200
@@ -353,7 +347,6 @@ def register_post():
         email = request.form.get("email","").strip()
         password = request.form.get("password","")
         confirm_password = request.form.get("confirm_password","")
-        
         if not username or not email or not password:
             flash("All fields are required.", "error")
             return redirect(url_for("register"))
@@ -366,7 +359,6 @@ def register_post():
         if exists:
             flash("Username or email already taken.", "error")
             return redirect(url_for("register"))
-        
         u = User(
             username=username,
             email=email,
@@ -391,7 +383,6 @@ def dashboard():
     db = get_db()
     try:
         u = current_user()
-        # daily spin reset
         today = date.today()
         if u.last_spin_date != today:
             u.last_spin_date = today
@@ -422,72 +413,57 @@ def dashboard():
 # ------------------ Bot Management (Node.js) ------------------
 bot_processes = {}
 
-def find_node_entry_point(bot_dir):
-    """Find the main JS file to run. Case‑insensitive."""
+def find_main_js_file(bot_dir):
+    """Find the main Node.js entry file with priority order."""
     common_names = [
-        'index.js', 'Index.js', 'INDEX.js',
-        'server.js', 'Server.js', 'SERVER.js',
         'app.js', 'App.js', 'APP.js',
-        'main.js', 'Main.js', 'MAIN.js',
-        'bot.js', 'Bot.js', 'BOT.js',
-        'start.js', 'Start.js', 'START.js'
+        'index.js', 'Index.js', 'INDEX.js',
+        'main.js', 'Main.js', 'MAIN.js'
     ]
     for name in common_names:
-        if (bot_dir / name).exists():
-            return bot_dir / name
-        lower_name = name.lower()
-        if lower_name != name and (bot_dir / lower_name).exists():
-            return bot_dir / lower_name
-    # Check package.json main
-    pkg_json = bot_dir / "package.json"
-    if pkg_json.exists():
-        try:
-            with open(pkg_json, 'r') as f:
-                pkg = json.load(f)
-                main = pkg.get('main')
-                if main:
-                    candidate = bot_dir / main
-                    if candidate.exists():
-                        return candidate
-        except:
-            pass
-    # Fallback: any .js file
+        candidate = bot_dir / name
+        if candidate.exists():
+            return candidate
+    # Fallback: first .js file
     js_files = list(bot_dir.glob("*.js"))
     if js_files:
         return js_files[0]
     return None
 
 def run_npm_install(bot_dir, log_file):
+    """Run npm install in the bot directory if package.json exists."""
+    package_json = bot_dir / "package.json"
+    if not package_json.exists():
+        return True
     try:
         with open(log_file, "a", buffering=1) as lf:
-            lf.write(f"\n=== npm install {datetime.utcnow().isoformat()}Z ===\n")
-            env = os.environ.copy()
+            lf.write("\n=== Running npm install ===\n")
             proc = subprocess.Popen(
                 ["npm", "install"],
                 cwd=str(bot_dir),
                 stdout=lf,
                 stderr=lf,
                 text=True,
-                env=env
+                env=os.environ.copy()
             )
             proc.wait(timeout=120)
-            if proc.returncode != 0:
-                lf.write(f"npm install failed with code {proc.returncode}\n")
-    except subprocess.TimeoutExpired:
-        with open(log_file, "a") as lf:
-            lf.write("npm install timed out after 120 seconds\n")
+            if proc.returncode == 0:
+                return True
+            else:
+                return False
     except Exception as e:
-        with open(log_file, "a") as lf:
-            lf.write(f"npm install error: {e}\n")
+        print(f"npm install failed: {e}")
+        return False
 
-def _start_node_process(cmd, log_file, env_override=None, bot_dir=None):
+def _start_process_and_log(cmd, log_file, env_override=None, bot_dir=None):
     with open(log_file, "a", buffering=1) as lf:
         lf.write(f"\n=== START {datetime.utcnow().isoformat()}Z ===\n")
         env = os.environ.copy()
         if env_override:
             env.update(env_override)
         if bot_dir:
-            env['NODE_PATH'] = str(bot_dir) + ":" + env.get('NODE_PATH', '')
+            env['NODE_PATH'] = str(bot_dir / "node_modules") if (bot_dir / "node_modules").exists() else env.get('NODE_PATH', '')
+        env['PYTHONUNBUFFERED'] = '1'  # not needed but harmless
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -543,21 +519,12 @@ def start_bot(bot_id: int):
                 env_vars = json.loads(bot.env_vars)
             except Exception as e:
                 print(f"Failed to parse env_vars for bot {bot.id}: {e}")
-        
         bot_dir = path.parent
-        pkg_json = bot_dir / "package.json"
-        if pkg_json.exists():
-            print(f"Running npm install for bot {bot.id}")
-            run_npm_install(bot_dir, log_file)
-        
-        entry = find_node_entry_point(bot_dir)
-        if not entry:
-            return jsonify(ok=False, msg="No JavaScript entry file found (index.js, server.js, app.js, main.js, etc.)")
-        
-        bot.filepath = str(entry)
-        db.commit()
-        
-        proc = _start_node_process(["node", str(entry)], log_file, env_override=env_vars, bot_dir=str(bot_dir))
+        # Run npm install if package.json exists
+        if not run_npm_install(bot_dir, log_file):
+            flash("npm install failed. Check logs.", "error")
+            return jsonify(ok=False, msg="npm install failed")
+        proc = _start_process_and_log(["node", str(path)], log_file, env_override=env_vars, bot_dir=str(bot_dir))
         bot.pid = proc.pid
         bot.status = "running"
         db.commit()
@@ -794,11 +761,21 @@ def handle_bot_command(data):
     if not bot_id or not command:
         return
     room = f"bot_{bot_id}"
-    if command.startswith(('npm install', 'npm uninstall', 'npm i')):
+    # Allow npm install and npm uninstall (global commands)
+    if command.startswith(('npm install', 'npm uninstall')):
         dangerous = ['&', '|', ';', '>', '<', '$', '`', '\\', '(', ')']
         if any(c in command for c in dangerous):
             emit('bot_output', '❌ Command contains unsafe characters.\r\n', room=room)
             return
+        try:
+            args = shlex.split(command)
+        except Exception as e:
+            emit('bot_output', f'❌ Failed to parse command: {e}\r\n', room=room)
+            return
+        if len(args) < 2 or args[1] not in ['install', 'uninstall']:
+            emit('bot_output', '❌ Only "npm install" or "npm uninstall" are allowed.\r\n', room=room)
+            return
+        # Run npm command in the bot's directory
         db = get_db()
         try:
             bot = db.get(Bot, bot_id)
@@ -807,8 +784,7 @@ def handle_bot_command(data):
                 return
             bot_dir = Path(bot.filepath).parent
             proc = subprocess.Popen(
-                command,
-                shell=True,
+                args,
                 cwd=str(bot_dir),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -827,6 +803,7 @@ def handle_bot_command(data):
         finally:
             db.close()
         return
+    # Otherwise, send command to bot's stdin
     proc = bot_processes.get(int(bot_id))
     if proc and proc.poll() is None:
         try:
@@ -838,39 +815,7 @@ def handle_bot_command(data):
     else:
         emit('bot_output', '❌ Bot is not running. Start it first.\r\n', room=room)
 
-# ---------------- Upload Route ----------------
-def find_main_file(bot_dir):
-    priority_names = [
-        'index.js', 'Index.js', 'INDEX.js',
-        'server.js', 'Server.js', 'SERVER.js',
-        'app.js', 'App.js', 'APP.js',
-        'main.js', 'Main.js', 'MAIN.js',
-        'bot.js', 'Bot.js', 'BOT.js',
-        'start.js', 'Start.js', 'START.js'
-    ]
-    for name in priority_names:
-        if (bot_dir / name).exists():
-            return bot_dir / name
-        lower_name = name.lower()
-        if lower_name != name and (bot_dir / lower_name).exists():
-            return bot_dir / lower_name
-    pkg_json = bot_dir / "package.json"
-    if pkg_json.exists():
-        try:
-            with open(pkg_json, 'r') as f:
-                pkg = json.load(f)
-                main = pkg.get('main')
-                if main:
-                    candidate = bot_dir / main
-                    if candidate.exists():
-                        return candidate
-        except:
-            pass
-    js_files = list(bot_dir.glob("*.js"))
-    if js_files:
-        return js_files[0]
-    return None
-
+# ---------------- Upload Route (supports .zip only, extracts, finds main .js) ----------------
 @app.get("/upload", endpoint="upload")
 @login_required
 def upload_page():
@@ -898,30 +843,27 @@ def upload_post():
 
         target_path = bot_dir / filename
 
-        if allowed_archive(filename):
-            zip_path = target_path
-            f.save(zip_path)
-            try:
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(bot_dir)
-                zip_path.unlink()
-                main_file = find_main_file(bot_dir)
-                if not main_file:
-                    raise Exception("No JavaScript entry file found in the zip archive.")
-                filename = main_file.name
-                target_path = main_file
-            except Exception as e:
-                flash(f"Failed to extract zip: {e}", "error")
-                import shutil
-                shutil.rmtree(bot_dir)
-                return redirect(url_for("upload"))
-        else:
-            f.save(target_path)
-            if not filename.endswith('.js'):
-                flash("Only JavaScript (.js) or zip files are allowed.", "error")
-                target_path.unlink()
-                bot_dir.rmdir()
-                return redirect(url_for("upload"))
+        if not allowed_archive(filename):
+            flash("Only .zip files are allowed.", "error")
+            return redirect(url_for("upload"))
+
+        # Save zip, extract
+        zip_path = target_path
+        f.save(zip_path)
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(bot_dir)
+            zip_path.unlink()
+            main_file = find_main_js_file(bot_dir)
+            if not main_file:
+                raise Exception("No .js file found in the zip archive.")
+            filename = main_file.name
+            target_path = main_file
+        except Exception as e:
+            flash(f"Failed to extract zip: {e}", "error")
+            import shutil
+            shutil.rmtree(bot_dir)
+            return redirect(url_for("upload"))
 
         uid = strong_uid()
         logpath = (LOG_DIR / f"{uid}.log").as_posix()
@@ -1100,7 +1042,7 @@ def payment_submit():
         if file.filename == '':
             flash("No receipt file selected.", "error")
             return redirect(url_for("payment"))
-        if not allowed_file(file.filename):
+        if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.pdf')):
             flash("Invalid file type. Allowed: png, jpg, jpeg, gif, pdf", "error")
             return redirect(url_for("payment"))
         if not package_name or not coins or not amount:
@@ -1415,13 +1357,10 @@ def spin():
             u.last_spin_date = today
             u.spin_remaining = 1
             db.commit()
-
         if u.spin_remaining <= 0:
             return jsonify({"error": "No spins remaining today. Come back tomorrow!"}), 400
-
         u.spin_remaining -= 1
         db.commit()
-
         segments = [
             {"name": "10 Coins", "type": "coins", "value": 10, "weight": 2},
             {"name": "50 Coins", "type": "coins", "value": 50, "weight": 2},
@@ -1437,11 +1376,9 @@ def spin():
         for s in segments:
             weighted.extend([s] * s["weight"])
         result = random.choice(weighted)
-
         message = ""
         coins_gained = 0
         multiplier_used = False
-
         if result["type"] == "coins":
             coins_gained = result["value"]
             if u.multiplier_active:
@@ -1467,7 +1404,6 @@ def spin():
             message = "🎉 Free Spin! You get one extra spin today."
         else:
             message = "😞 No win this time. Better luck next spin!"
-
         return jsonify({
             "success": True,
             "segment": result["name"],
