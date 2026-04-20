@@ -414,7 +414,6 @@ def dashboard():
 bot_processes = {}
 
 def find_main_js_file(bot_dir):
-    """Find the main Node.js entry file with priority order."""
     common_names = [
         'app.js', 'App.js', 'APP.js',
         'index.js', 'Index.js', 'INDEX.js',
@@ -424,17 +423,22 @@ def find_main_js_file(bot_dir):
         candidate = bot_dir / name
         if candidate.exists():
             return candidate
-    # Fallback: first .js file
     js_files = list(bot_dir.glob("*.js"))
     if js_files:
         return js_files[0]
     return None
 
 def run_npm_install(bot_dir, log_file):
-    """Run npm install in the bot directory if package.json exists."""
+    """Run npm install only if node_modules is missing or package.json is newer."""
     package_json = bot_dir / "package.json"
+    node_modules = bot_dir / "node_modules"
     if not package_json.exists():
         return True
+    # Check if node_modules exists and is newer than package.json
+    if node_modules.exists():
+        # If package.json hasn't changed, skip
+        if node_modules.stat().st_mtime > package_json.stat().st_mtime:
+            return True
     try:
         with open(log_file, "a", buffering=1) as lf:
             lf.write("\n=== Running npm install ===\n")
@@ -463,7 +467,7 @@ def _start_process_and_log(cmd, log_file, env_override=None, bot_dir=None):
             env.update(env_override)
         if bot_dir:
             env['NODE_PATH'] = str(bot_dir / "node_modules") if (bot_dir / "node_modules").exists() else env.get('NODE_PATH', '')
-        env['PYTHONUNBUFFERED'] = '1'  # not needed but harmless
+        env['PYTHONUNBUFFERED'] = '1'
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -520,7 +524,7 @@ def start_bot(bot_id: int):
             except Exception as e:
                 print(f"Failed to parse env_vars for bot {bot.id}: {e}")
         bot_dir = path.parent
-        # Run npm install if package.json exists
+        # Run npm install only if needed
         if not run_npm_install(bot_dir, log_file):
             flash("npm install failed. Check logs.", "error")
             return jsonify(ok=False, msg="npm install failed")
@@ -682,6 +686,7 @@ def tail_file(filepath, n=100):
         return []
     try:
         with open(filepath, 'r', errors='ignore') as f:
+            # Read last n lines efficiently
             f.seek(0, 2)
             file_size = f.tell()
             block_size = 1024
@@ -815,7 +820,7 @@ def handle_bot_command(data):
     else:
         emit('bot_output', '❌ Bot is not running. Start it first.\r\n', room=room)
 
-# ---------------- Upload Route (supports .zip only, extracts, finds main .js) ----------------
+# ---------------- Upload Route (supports .zip only) ----------------
 @app.get("/upload", endpoint="upload")
 @login_required
 def upload_page():
