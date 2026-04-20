@@ -9,6 +9,7 @@
     </div>
     <div class="actions">
       <a class="btn" href="{{ url_for('upload') }}">+ Upload</a>
+      <a class="btn btn-outline" href="{{ url_for('fortune_wheel') }}">🎡 Fortune Wheel</a>
     </div>
   </div>
 
@@ -35,7 +36,9 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>UID</th><th>File</th><th>Status</th><th>Uploaded</th></tr></thead>
+        <thead>
+          <tr><th>UID</th><th>File</th><th>Status</th><th>Uploaded</th></tr>
+        </thead>
         <tbody>
           {% for b in pending %}
           <tr>
@@ -70,7 +73,12 @@
               <span class="badge">Stopped</span>
             {% endif %}
           </div>
-          <a class="btn btn-ghost" href="{{ url_for('logs', bot_id=b.id) }}">Logs</a>
+          <div class="row gap">
+            <a class="btn btn-ghost" href="{{ url_for('bot_terminal', bot_id=b.id) }}">Logs</a>
+            <a class="btn btn-ghost" href="{{ url_for('bot_env', bot_id=b.id) }}">Config</a>
+            <a class="btn btn-ghost" href="{{ url_for('download_bot', bot_id=b.id) }}">Download</a>
+            <a class="btn btn-ghost" href="{{ url_for('edit_file', bot_id=b.id) }}">Edit</a>
+          </div>
         </div>
 
         <div class="bot-info">
