@@ -297,7 +297,7 @@ def stop_expired_bots():
 expiry_thread = threading.Thread(target=stop_expired_bots, daemon=True)
 expiry_thread.start()
 
-# --------------- Auth Routes (no email) ---------------
+# --------------- Auth Routes ---------------
 @app.route("/ping")
 def ping():
     return {"status": "ok", "message": "Server is awake"}, 200
@@ -391,6 +391,7 @@ def dashboard():
     db = get_db()
     try:
         u = current_user()
+        # daily spin reset
         today = date.today()
         if u.last_spin_date != today:
             u.last_spin_date = today
@@ -423,7 +424,6 @@ bot_processes = {}
 
 def find_node_entry_point(bot_dir):
     """Find the main JS file to run. Case‑insensitive."""
-    # Common entry names (case‑insensitive)
     common_names = [
         'index.js', 'Index.js', 'INDEX.js',
         'server.js', 'Server.js', 'SERVER.js',
@@ -432,16 +432,13 @@ def find_node_entry_point(bot_dir):
         'bot.js', 'Bot.js', 'BOT.js',
         'start.js', 'Start.js', 'START.js'
     ]
-    # First check common names case‑insensitively
     for name in common_names:
-        # Try exact name
         if (bot_dir / name).exists():
             return bot_dir / name
-        # Try lowercased version (already lower in list, but ensure)
         lower_name = name.lower()
         if lower_name != name and (bot_dir / lower_name).exists():
             return bot_dir / lower_name
-    # Check package.json main field
+    # Check package.json main
     pkg_json = bot_dir / "package.json"
     if pkg_json.exists():
         try:
@@ -454,14 +451,13 @@ def find_node_entry_point(bot_dir):
                         return candidate
         except:
             pass
-    # Fallback: any .js file (first one found)
+    # Fallback: any .js file
     js_files = list(bot_dir.glob("*.js"))
     if js_files:
         return js_files[0]
     return None
 
 def run_npm_install(bot_dir, log_file):
-    """Run npm install in bot directory, logging output."""
     try:
         with open(log_file, "a", buffering=1) as lf:
             lf.write(f"\n=== npm install {datetime.utcnow().isoformat()}Z ===\n")
@@ -474,7 +470,7 @@ def run_npm_install(bot_dir, log_file):
                 text=True,
                 env=env
             )
-            proc.wait(timeout=120)  # 2 minutes max
+            proc.wait(timeout=120)
             if proc.returncode != 0:
                 lf.write(f"npm install failed with code {proc.returncode}\n")
     except subprocess.TimeoutExpired:
@@ -548,20 +544,16 @@ def start_bot(bot_id: int):
             except Exception as e:
                 print(f"Failed to parse env_vars for bot {bot.id}: {e}")
         
-        # Get bot directory
         bot_dir = path.parent
-        # Run npm install if package.json exists
         pkg_json = bot_dir / "package.json"
         if pkg_json.exists():
             print(f"Running npm install for bot {bot.id}")
             run_npm_install(bot_dir, log_file)
         
-        # Determine entry point (should be the same as stored filepath, but re-evaluate)
         entry = find_node_entry_point(bot_dir)
         if not entry:
             return jsonify(ok=False, msg="No JavaScript entry file found (index.js, server.js, app.js, main.js, etc.)")
         
-        # Update bot.filepath to the actual entry point (in case it changed)
         bot.filepath = str(entry)
         db.commit()
         
@@ -802,7 +794,6 @@ def handle_bot_command(data):
     if not bot_id or not command:
         return
     room = f"bot_{bot_id}"
-    # Allow npm install and npm uninstall
     if command.startswith(('npm install', 'npm uninstall', 'npm i')):
         dangerous = ['&', '|', ';', '>', '<', '$', '`', '\\', '(', ')']
         if any(c in command for c in dangerous):
@@ -836,7 +827,6 @@ def handle_bot_command(data):
         finally:
             db.close()
         return
-    # Otherwise, send command to bot's stdin
     proc = bot_processes.get(int(bot_id))
     if proc and proc.poll() is None:
         try:
@@ -848,10 +838,8 @@ def handle_bot_command(data):
     else:
         emit('bot_output', '❌ Bot is not running. Start it first.\r\n', room=room)
 
-# ---------------- Upload Route (supports .js and .zip) ----------------
+# ---------------- Upload Route ----------------
 def find_main_file(bot_dir):
-    """Find the main JS entry file (case‑insensitive)."""
-    # Priority list (case‑insensitive)
     priority_names = [
         'index.js', 'Index.js', 'INDEX.js',
         'server.js', 'Server.js', 'SERVER.js',
@@ -863,11 +851,9 @@ def find_main_file(bot_dir):
     for name in priority_names:
         if (bot_dir / name).exists():
             return bot_dir / name
-        # also check lowercased
         lower_name = name.lower()
         if lower_name != name and (bot_dir / lower_name).exists():
             return bot_dir / lower_name
-    # Check package.json main
     pkg_json = bot_dir / "package.json"
     if pkg_json.exists():
         try:
@@ -880,7 +866,6 @@ def find_main_file(bot_dir):
                         return candidate
         except:
             pass
-    # Fallback: any .js file
     js_files = list(bot_dir.glob("*.js"))
     if js_files:
         return js_files[0]
@@ -914,15 +899,12 @@ def upload_post():
         target_path = bot_dir / filename
 
         if allowed_archive(filename):
-            # It's a zip file – extract it
             zip_path = target_path
             f.save(zip_path)
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(bot_dir)
-                # Remove the zip file after extraction
                 zip_path.unlink()
-                # Find the main entry file
                 main_file = find_main_file(bot_dir)
                 if not main_file:
                     raise Exception("No JavaScript entry file found in the zip archive.")
@@ -934,7 +916,6 @@ def upload_post():
                 shutil.rmtree(bot_dir)
                 return redirect(url_for("upload"))
         else:
-            # Single file upload – must be .js
             f.save(target_path)
             if not filename.endswith('.js'):
                 flash("Only JavaScript (.js) or zip files are allowed.", "error")
